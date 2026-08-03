@@ -1,4 +1,3 @@
-
 #include "tesla_ble_vehicle.h"
 #include "common.h"
 #include <client.h>
