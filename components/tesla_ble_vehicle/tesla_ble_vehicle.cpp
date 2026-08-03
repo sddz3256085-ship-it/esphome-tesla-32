@@ -278,7 +278,7 @@ void TeslaBLEVehicle::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_i
 }
 
 void TeslaBLEVehicle::handle_connection_established() {
-  if (vehicle_) { vehicle_->set_connected(true); ESP_LOGI(TAG, "Connection established - G1003: skip initial polls to unblock unlock"); last_vcsec_poll_ = millis(); last_infotainment_poll_ = millis(); }
+  if (vehicle_) { vehicle_->set_connected(true); ESP_LOGI(TAG, "Connection established - G1005: skip initial polls to unblock unlock"); last_vcsec_poll_ = millis(); last_infotainment_poll_ = millis(); }
   if (state_manager_) state_manager_->set_sensors_available(true);
   this->status_clear_warning();
 }
