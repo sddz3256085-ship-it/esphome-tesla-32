@@ -3,7 +3,6 @@
 #include <esphome/core/helpers.h>
 #include <cmath>
 #include <algorithm>
-#include <inttypes.h>  // [FIX-COMPILE-3] PRId32 for int32_t format specifier (Xtensa int32_t=long int, %d warning)
 
 namespace esphome {
 namespace tesla_ble_vehicle {
@@ -16,7 +15,6 @@ void VehicleStateManager::set_binary_sensor(const std::string& id, binary_sensor
         return;
     }
     binary_sensors_[id] = sensor;
-    ESP_LOGD(STATE_MANAGER_TAG, "Registered binary sensor: %s", id.c_str());
 }
 
 void VehicleStateManager::set_sensor(const std::string& id, sensor::Sensor* sensor) {
@@ -24,7 +22,6 @@ void VehicleStateManager::set_sensor(const std::string& id, sensor::Sensor* sens
         return;
     }
     sensors_[id] = sensor;
-    ESP_LOGD(STATE_MANAGER_TAG, "Registered sensor: %s", id.c_str());
 }
 
 void VehicleStateManager::set_text_sensor(const std::string& id, text_sensor::TextSensor* sensor) {
@@ -32,7 +29,6 @@ void VehicleStateManager::set_text_sensor(const std::string& id, text_sensor::Te
         return;
     }
     text_sensors_[id] = sensor;
-    ESP_LOGD(STATE_MANAGER_TAG, "Registered text sensor: %s", id.c_str());
 }
 
 binary_sensor::BinarySensor* VehicleStateManager::get_binary_sensor(const std::string& id) {
@@ -81,7 +77,6 @@ bool VehicleStateManager::publish_text_sensor(const std::string& id, const std::
 }
 
 void VehicleStateManager::update_vehicle_status(const VCSEC_VehicleStatus& status) {
-    ESP_LOGD(STATE_MANAGER_TAG, "Updating vehicle status");
     
     update_sleep_status(status.vehicleSleepStatus);
     update_lock_status(status.vehicleLockState);
@@ -119,7 +114,6 @@ void VehicleStateManager::update_user_presence(VCSEC_UserPresence_E presence) {
 }
 
 void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charge_state) {
-    ESP_LOGD(STATE_MANAGER_TAG, "Updating charge state");
     
     if (charge_state.has_charging_state) {
         const bool was_charging = is_charging_;
@@ -128,20 +122,11 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
             charge_state.charging_state.which_type == CarServer_ChargeState_ChargingState_Starting_tag
         );
         
-        ESP_LOGD(STATE_MANAGER_TAG, "Charging state check: was=%s, new=%s, state_type=%d", 
-                 was_charging ? "ON" : "OFF", 
-                 new_charging_state ? "ON" : "OFF",
-                 charge_state.charging_state.which_type);
         
         is_charging_ = new_charging_state;
         
         if (charging_switch_ && (!charging_switch_->has_state() || charging_switch_->state != is_charging_)) {
-            ESP_LOGD(STATE_MANAGER_TAG, "Syncing charging switch to vehicle state: %s", is_charging_ ? "ON" : "OFF");
             publish_sensor_state(charging_switch_, is_charging_);
-        }
-        
-        if (was_charging != is_charging_) {
-            ESP_LOGD(STATE_MANAGER_TAG, "Charging state changed: %s", is_charging_ ? "ON" : "OFF");
         }
         
         publish_text_sensor("charging_state", get_charging_state_text(charge_state.charging_state));
@@ -222,7 +207,7 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
     if (charge_state.which_optional_charge_current_request_max) {
         int32_t new_max = charge_state.optional_charge_current_request_max.charge_current_request_max;
         if (new_max > 0 && new_max != charging_amps_max_) {
-            ESP_LOGI(STATE_MANAGER_TAG, "Received new max charging amps: %" PRId32 " A", new_max);  // [FIX-COMPILE-3] %d→PRId32 (int32_t=long int on Xtensa)
+            ESP_LOGI(STATE_MANAGER_TAG, "Received new max charging amps: %ld A", static_cast<long>(new_max));
             update_charging_amps_max(new_max);
         }
     }
@@ -242,14 +227,12 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
             auto new_state = latch_engaged ? lock::LOCK_STATE_LOCKED : lock::LOCK_STATE_UNLOCKED;
             if (charge_port_latch_lock_->state != new_state) {
                 charge_port_latch_lock_->publish_state(new_state);
-                ESP_LOGD(STATE_MANAGER_TAG, "Charge port latch: %s", latch_engaged ? "ENGAGED (locked)" : "DISENGAGED (unlocked)");
             }
         }
     }
 }
 
 void VehicleStateManager::update_climate_state(const CarServer_ClimateState& climate_state) {
-    ESP_LOGD(STATE_MANAGER_TAG, "Updating climate state");
     
     if (climate_state.which_optional_inside_temp_celsius) {
         const float temp = climate_state.optional_inside_temp_celsius.inside_temp_celsius;
@@ -287,7 +270,6 @@ void VehicleStateManager::update_climate_state(const CarServer_ClimateState& cli
     if (climate_state.which_optional_steering_wheel_heater && steering_wheel_heat_switch_ != nullptr) {
         const bool heater_on = climate_state.optional_steering_wheel_heater.steering_wheel_heater;
         if (!steering_wheel_heat_switch_->has_state() || steering_wheel_heat_switch_->state != heater_on) {
-            ESP_LOGD(STATE_MANAGER_TAG, "Syncing steering wheel heat switch to vehicle state: %s", heater_on ? "ON" : "OFF");
             publish_sensor_state(steering_wheel_heat_switch_, heater_on);
         }
     }
@@ -298,7 +280,6 @@ void VehicleStateManager::update_climate_state(const CarServer_ClimateState& cli
 }
 
 void VehicleStateManager::update_drive_state(const CarServer_DriveState& drive_state) {
-    ESP_LOGD(STATE_MANAGER_TAG, "Updating drive state");
     
     if (drive_state.has_shift_state) {
         publish_text_sensor("shift_state", get_shift_state_text(drive_state.shift_state));
@@ -324,7 +305,6 @@ void VehicleStateManager::update_drive_state(const CarServer_DriveState& drive_s
 }
 
 void VehicleStateManager::update_tire_pressure_state(const CarServer_TirePressureState& tire_pressure_state) {
-    ESP_LOGD(STATE_MANAGER_TAG, "Updating tire pressure state");
     
     if (tire_pressure_state.which_optional_tpms_pressure_fl) {
         const float pressure = tire_pressure_state.optional_tpms_pressure_fl.tpms_pressure_fl;
@@ -356,7 +336,6 @@ void VehicleStateManager::update_tire_pressure_state(const CarServer_TirePressur
 }
 
 void VehicleStateManager::update_closures_state(const CarServer_ClosuresState& closures_state) {
-    ESP_LOGD(STATE_MANAGER_TAG, "Updating closures state");
     
     if (closures_state.which_optional_door_open_driver_front) {
         publish_binary_sensor("door_driver_front", closures_state.optional_door_open_driver_front.door_open_driver_front);
@@ -420,7 +399,6 @@ void VehicleStateManager::update_closures_state(const CarServer_ClosuresState& c
                               closures_state.sentry_mode_state.which_type == CarServer_ClosuresState_SentryModeState_Aware_tag ||
                               closures_state.sentry_mode_state.which_type == CarServer_ClosuresState_SentryModeState_Panic_tag);
         if (!sentry_mode_switch_->has_state() || sentry_mode_switch_->state != sentry_active) {
-            ESP_LOGD(STATE_MANAGER_TAG, "Syncing sentry mode switch to vehicle state: %s", sentry_active ? "ON" : "OFF");
             publish_sensor_state(sentry_mode_switch_, sentry_active);
         }
     }
@@ -437,7 +415,6 @@ void VehicleStateManager::update_asleep(bool asleep) {
 }
 
 void VehicleStateManager::update_unlocked(bool unlocked) {
-    ESP_LOGD("DEBUG", "update_unlocked called, unlocked=%d", unlocked);
     if (doors_lock_ != nullptr) {
         auto new_state = unlocked ? lock::LOCK_STATE_UNLOCKED : lock::LOCK_STATE_LOCKED;
         if (doors_lock_->state != new_state) {
@@ -459,13 +436,11 @@ void VehicleStateManager::update_charge_flap_open(bool open) {
     if (charge_port_door_cover_ != nullptr) {
         charge_port_door_cover_->position = open ? cover::COVER_OPEN : cover::COVER_CLOSED;
         charge_port_door_cover_->publish_state();
-        ESP_LOGD(STATE_MANAGER_TAG, "Charge port door: %s (from VCSEC)", open ? "OPEN" : "CLOSED");
     }
     publish_binary_sensor("charge_flap_open", open);
 }
 
 void VehicleStateManager::update_charging_amps(float amps) {
-    ESP_LOGD(STATE_MANAGER_TAG, "Charging amps from vehicle: %.1f A", amps);
     publish_sensor_state(charging_amps_number_, amps);
 }
 
@@ -474,13 +449,11 @@ void VehicleStateManager::update_charger_connected(bool connected) {
 }
 
 void VehicleStateManager::set_sensors_available(bool available) {
-    ESP_LOGD(STATE_MANAGER_TAG, "Setting sensors available: %s", available ? "true" : "false");
     set_sensor_available(get_binary_sensor("asleep"), available);
     set_sensor_available(get_binary_sensor("user_present"), available);
 }
 
 void VehicleStateManager::reset_all_states() {
-    ESP_LOGD(STATE_MANAGER_TAG, "Resetting all vehicle states");
     is_charging_ = false;
     set_sensors_available(false);
 }
@@ -515,7 +488,7 @@ float VehicleStateManager::get_charging_amps() const {
 
 void VehicleStateManager::update_charging_amps_max(int32_t new_max) {
     if (new_max <= 0) {
-        ESP_LOGW(STATE_MANAGER_TAG, "Invalid max charging amps: %" PRId32 " A", new_max);  // [FIX-COMPILE-3] %d→PRId32 (int32_t=long int on Xtensa)
+        ESP_LOGW(STATE_MANAGER_TAG, "Invalid max charging amps: %ld A", static_cast<long>(new_max));
         return;
     }
 
@@ -527,12 +500,10 @@ void VehicleStateManager::update_charging_amps_max(int32_t new_max) {
 
     if (charging_amps_number_ && parent_) {
         parent_->update_charging_amps_max_value(new_max);
-        ESP_LOGD(STATE_MANAGER_TAG, "Updated max charging amps to %d A", new_max);
     }
 }
 
 void VehicleStateManager::track_command_issued() {
-    ESP_LOGD(STATE_MANAGER_TAG, "Command issued - state updates will sync immediately");
 }
 
 bool VehicleStateManager::publish_sensor_state(binary_sensor::BinarySensor* sensor, bool state) {
