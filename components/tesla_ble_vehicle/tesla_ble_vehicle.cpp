@@ -110,9 +110,13 @@ void TeslaBLEVehicle::dump_config() {
   ESP_LOGCONFIG(TAG, "Tesla BLE Vehicle:");
   ESP_LOGCONFIG(TAG, "  VIN: %s", vin_.empty() ? "Not set" : vin_.c_str());
   ESP_LOGCONFIG(TAG, "  Role: %s", role_.c_str());
-  ESP_LOGCONFIG(TAG, "  Max Charging Amps: %d", state_manager_ ? state_manager_->get_charging_amps_max() : 32);
+  ESP_LOGCONFIG(TAG, "  Max Charging Amps: %ld",
+                 static_cast<long>(state_manager_ ? state_manager_->get_charging_amps_max() : 32));
   ESP_LOGCONFIG(TAG, "  Polling: VCSEC=%ums, Awake=%ums, Active=%ums", vcsec_poll_interval_, infotainment_poll_interval_awake_, infotainment_poll_interval_active_);
-  ESP_LOGCONFIG(TAG, "  Sensors: %d binary, %d numeric, %d text", pending_binary_sensors_.size(), pending_sensors_.size(), pending_text_sensors_.size());
+  ESP_LOGCONFIG(TAG, "  Sensors: %u binary, %u numeric, %u text",
+                 static_cast<unsigned>(pending_binary_sensors_.size()),
+                 static_cast<unsigned>(pending_sensors_.size()),
+                 static_cast<unsigned>(pending_text_sensors_.size()));
 }
 
 void TeslaBLEVehicle::set_vin(const char *vin) { if (vin == nullptr) return; vin_ = vin; ESP_LOGD(TAG, "VIN set to: %s", vin_.c_str()); if (vehicle_) vehicle_->set_vin(vin_); }
@@ -165,15 +169,7 @@ int TeslaBLEVehicle::start_driving() {
     ESP_LOGE(TAG, "Vehicle 实例不可用");
     return -1;
   }
-  // [FIX-COMPILE-1 P0] 原 vehicle_->start_driving() 在 yoziru/tesla-ble 库中不存在,
-  //   导致编译失败: 'class TeslaBLE::Vehicle' has no member named 'start_driving'.
-  //   修复: 改用 wake() + vcsec_poll() 序列, 等效触发驾驶授权流程:
-  //     1) wake()       - 唤醒车辆(已醒时返回 already awake, 幂等)
-  //     2) vcsec_poll() - 刷新 VCSEC 状态, 触发车辆识别钥匙身份, 隐式完成驾驶授权
-  //   注: yoziru/tesla-ble 库的驾驶授权是隐式的: 钥匙配对为 OWNER/DRIVER 角色后,
-  //       只要车辆已醒 + BLE 已连接 + 已解锁, 即可挂挡驾驶, 无显式 start_driving 命令.
-  vehicle_->wake();
-  vehicle_->vcsec_poll();
+  vehicle_->start_driving();
   return 0;
 }
 
@@ -266,7 +262,7 @@ EXEC_BOOL_COMMAND(set_sentry_mode, "Sentry mode %s requested", set_sentry_mode)
 void TeslaBLEVehicle::set_climate_temp(float temp) { ESP_LOGI(TAG, "Climate temperature %.1f°C requested", temp); if (state_manager_) state_manager_->track_command_issued(); if (vehicle_) vehicle_->set_climate_temp(temp); }
 void TeslaBLEVehicle::set_climate_keeper(int mode) { const char *mode_names[] = {"Off", "On", "Dog", "Camp"}; ESP_LOGI(TAG, "Climate keeper %s requested", (mode >= 0 && mode <= 3) ? mode_names[mode] : "Unknown"); if (state_manager_) state_manager_->track_command_issued(); if (vehicle_) vehicle_->set_climate_keeper(mode); }
 
-void TeslaBLEVehicle::update_charging_amps_max_value(int32_t new_max) { if (pending_charging_amps_number_) { auto *tesla_amps = static_cast<TeslaChargingAmpsNumber *>(pending_charging_amps_number_); tesla_amps->update_max_value(new_max); ESP_LOGD(TAG, "Updated charging amps max value to %d A", new_max); } }
+void TeslaBLEVehicle::update_charging_amps_max_value(int32_t new_max) { if (pending_charging_amps_number_) { auto *tesla_amps = static_cast<TeslaChargingAmpsNumber *>(pending_charging_amps_number_); tesla_amps->update_max_value(new_max); ESP_LOGD(TAG, "Updated charging amps max value to %ld A", static_cast<long>(new_max)); } }
 
 void TeslaBLEVehicle::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gattc_cb_param_t *param) {
   ESP_LOGV(TAG, "GATTC event %d", event);
@@ -308,7 +304,7 @@ void TeslaBLEVehicle::handle_connection_lost() {
 
 // ---------- 以下几个类的实现保持不变 ----------
 void TeslaChargingAmpsNumber::control(float value) { if (!parent_) return; float min_val = this->traits.get_min_value(); float max_val = this->traits.get_max_value(); if (value < min_val || value > max_val) { ESP_LOGW(TAG, "Charging amps value %.1f out of bounds", value); return; } parent_->set_charging_amps(static_cast<int>(value)); publish_state(value); }
-void TeslaChargingAmpsNumber::update_max_value(int32_t new_max) { if (new_max <= 0) return; auto old_max = this->traits.get_max_value(); if (std::abs(old_max - new_max) > 0.1f) { ESP_LOGD(TAG, "Updating charging amps max from %.0f to %d A", old_max, new_max); this->traits.set_max_value(new_max); if (this->has_state() && this->state > new_max) this->publish_state(new_max); if (this->has_state()) this->publish_state(this->state); } }
+void TeslaChargingAmpsNumber::update_max_value(int32_t new_max) { if (new_max <= 0) return; auto old_max = this->traits.get_max_value(); if (std::abs(old_max - new_max) > 0.1f) { ESP_LOGD(TAG, "Updating charging amps max from %.0f to %ld A", old_max, static_cast<long>(new_max)); this->traits.set_max_value(new_max); if (this->has_state() && this->state > new_max) this->publish_state(new_max); if (this->has_state()) this->publish_state(this->state); } }
 void TeslaChargingLimitNumber::control(float value) { if (!parent_) return; float min_val = this->traits.get_min_value(); float max_val = this->traits.get_max_value(); if (value < min_val || value > max_val) { ESP_LOGW(TAG, "Charging limit value %.1f out of bounds", value); return; } parent_->set_charging_limit(static_cast<int>(value)); publish_state(value); }
 
 void TeslaDoorsLock::control(const lock::LockCall &call) { if (!parent_) return; auto state = call.get_state(); if (state.has_value()) { if (state.value() == lock::LOCK_STATE_LOCKED) { parent_->lock_vehicle(); publish_state(lock::LOCK_STATE_LOCKING); } else if (state.value() == lock::LOCK_STATE_UNLOCKED) { parent_->unlock_vehicle(); publish_state(lock::LOCK_STATE_UNLOCKING); } } }
@@ -321,20 +317,15 @@ void TeslaWindowsCover::control(const cover::CoverCall &call) { if (!parent_) re
 void TeslaChargePortDoorCover::control(const cover::CoverCall &call) { if (!parent_) return; if (call.get_position().has_value()) { float pos = call.get_position().value(); if (pos == cover::COVER_OPEN) parent_->open_charge_port(); else if (pos == cover::COVER_CLOSED) parent_->close_charge_port(); } }
 
 climate::ClimateTraits TeslaClimate::traits() {
+  // ESPHome 2026.4+ moved custom climate mode vectors from ClimateTraits to Climate.
+  // Set them on the entity to avoid deprecated ClimateTraits setters and the 2026.11 removal.
+  this->set_supported_custom_presets({"Normal", "Defrost", "Keep On", "Dog Mode", "Camp Mode"});
+  this->set_supported_custom_fan_modes({"Normal", "Bioweapon Mode"});
   auto traits = climate::ClimateTraits();
   traits.set_supported_modes({climate::CLIMATE_MODE_OFF, climate::CLIMATE_MODE_HEAT_COOL});
-  // [FIX-COMPILE-4 P0] 移除 traits 上的 set_supported_custom_presets / set_supported_custom_fan_modes 调用
-  //   (ESPHome 2025.x deprecated, 2026.11.0 移除), 改在 setup() 中调用 Climate 实体上的新 API
   traits.add_feature_flags(climate::CLIMATE_SUPPORTS_CURRENT_TEMPERATURE);
   traits.set_visual_min_temperature(15.0f); traits.set_visual_max_temperature(28.0f); traits.set_visual_temperature_step(0.5f);
   return traits;
-}
-
-// [FIX-COMPILE-4 P0] 新 API: 在 Climate 实体上调用 set_supported_custom_presets/fan_modes
-//   替代旧的 traits().set_supported_custom_presets() (deprecated since 2025.x, removed in 2026.11.0)
-void TeslaClimate::setup() {
-  this->set_supported_custom_presets({"Normal", "Defrost", "Keep On", "Dog Mode", "Camp Mode"});
-  this->set_supported_custom_fan_modes({"Normal", "Bioweapon Mode"});
 }
 
 void TeslaClimate::control(const climate::ClimateCall &call) {
