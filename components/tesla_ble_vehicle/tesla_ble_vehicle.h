@@ -266,7 +266,6 @@ class TeslaChargePortDoorCover : public TeslaCoverBase { protected: void control
 class TeslaClimate : public climate::Climate {
 public:
     void set_parent(TeslaBLEVehicle *parent) { parent_ = parent; }
-    void setup() override;  // [FIX-COMPILE-4] setup() 中调用新 API 设置 custom_presets / custom_fan_modes (deprecated in 2026.11.0)
     climate::ClimateTraits traits() override;
     void control(const climate::ClimateCall &call) override;
     void update_state(bool is_on, float current_temp, float target_temp);
